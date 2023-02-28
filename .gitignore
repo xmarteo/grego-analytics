@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+################## Customized ignores for grego-analytics
+
+analytics/migrations
+gregoanalytics/settings.py
+gregoanalytics/wsgi.py
+*/__init__.py
+manage.py
