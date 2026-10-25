@@ -1,16 +1,38 @@
 import os
+import json
+import base64
 from analytics.models import *
 from collections import defaultdict
-import codecs
-import pickle
-from django.db.models import Q
 from urllib.parse import quote, unquote
 
-def str_from_filter(QObj):
-  return quote( codecs.encode( pickle.dumps(QObj), "base64" ).decode() )
+"""
+Query objects are JSON objects with the structure:
+{
+    "filters": {
+        ...
+    }
+}
+"""
 
-def filter_from_str(s):
-  return pickle.loads( codecs.decode(s.encode(), "base64") )
+def str_from_query(query):
+  payload = json.dumps(query)
+  encoded = base64.urlsafe_b64encode(payload.encode()).decode()
+  return quote(encoded)
+
+def query_from_str(s):
+  payload = base64.urlsafe_b64decode(
+      unquote(s).encode()
+  ).decode()
+  return json.loads(payload)
+
+def execute_query(query):
+  """
+  Runs an unserialized query (captured from the URL) and returns a queryset of Gregobase entries matching that query.
+  """
+  queryset = Chant.objects.all()
+  filters = query.get("filters", {})
+  queryset = queryset.filter(**filters)
+  return queryset
 
 def duplicate_usage():
   dupl_values = defaultdict(int)
@@ -19,12 +41,24 @@ def duplicate_usage():
   softdeleted = dupl_values[-1]
   nonduplicates = dupl_values[None]
   duplicates = sum( [dupl_values[x] for x in dupl_values if x not in [-1, None] ] )
-  softdeleted_filter = Q(duplicateof=-1)
-  nonduplicates_filter = Q(duplicateof=None)
-  duplicates_filter = Q(duplicateof__gt=-1)
-  out1 = "<a href=query/{}>{} chants are soft-deleted without duplication</a><br>".format(str_from_filter(softdeleted_filter), softdeleted)
-  out2 = "<a href=query/{}>{} chants are not duplicates</a><br>".format(str_from_filter(nonduplicates_filter), nonduplicates)
-  out3 = "<a href=query/{}>{} chants are soft-deleted as duplicates</a><br><br>".format(str_from_filter(duplicates_filter), duplicates)
+  softdeleted_query = {
+    "filters": {
+      "duplicateof": -1
+    }
+  }
+  nonduplicates_query = {
+    "filters": {
+      "duplicateof": None
+    }
+  }
+  duplicates_query = {
+    "filters": {
+      "duplicateof__gt": -1
+    }
+  }
+  out1 = "<a href=query/{}>{} chants are soft-deleted without duplication</a><br>".format(str_from_query(softdeleted_query), softdeleted)
+  out2 = "<a href=query/{}>{} chants are not duplicates</a><br>".format(str_from_query(nonduplicates_query), nonduplicates)
+  out3 = "<a href=query/{}>{} chants are soft-deleted as duplicates</a><br><br>".format(str_from_query(duplicates_query), duplicates)
   return out1+out2+out3
 
 def version_usage():
@@ -34,8 +68,13 @@ def version_usage():
   out = "{} different versions : <br>".format(len(versions))
   versions = {k: v for k, v in sorted(versions.items(), key=lambda item: item[1])}
   for version in versions :
-    v_filter = Q(version=version) & Q(duplicateof=None)
-    out += "<a href=query/{}>{} : {}</a><br>".format(str_from_filter(v_filter), version, versions[version])
+    query = {
+      "filters": {
+        "version": version,
+        "duplicateof": None
+      }
+    }
+    out += "<a href=query/{}>{} : {}</a><br>".format(str_from_query(query), version, versions[version])
   return out
 
 def version_by_source():
@@ -46,16 +85,28 @@ def version_by_source():
       versions[chant.version] +=1
     out += "<a href=https://gregobase.selapa.net/source.php?id={}>{} ({})</a> : ".format(source.id, source.title, source.year)
     for version in versions:
-      filter = Q(sources = source) & Q(version = version) & Q(duplicateof=None)
-      out += "<a href=query/{}>{} : {}</a>, ".format(str_from_filter(filter), version, versions[version])
+      query = {
+        "filters": {
+          "sources": source.id,
+          "version": version,
+          "duplicateof": None
+        }
+      }
+      out += "<a href=query/{}>{} : {}</a>, ".format(str_from_query(query), version, versions[version])
     out += "<br>"
   out += "No source : "
   versions = defaultdict(int)
   for chant in Chant.objects.filter(sources = None, duplicateof = None) :
     versions[chant.version] += 1
   for version in versions:
-    filter = Q(sources = None) & Q(version = version) & Q(duplicateof=None)
-    out += "<a href=query/{}>{} : {}</a>, ".format(str_from_filter(filter), version, versions[version])
+    query = {
+      "filters": {
+        "sources": None,
+        "version": version,
+        "duplicateof": None
+      }
+    }
+    out += "<a href=query/{}>{} : {}</a>, ".format(str_from_query(query), version, versions[version])
   return out
 
 def opart_usage():
@@ -65,8 +116,13 @@ def opart_usage():
     oparts[chant.office_part] += 1
   oparts = {k: v for k, v in sorted(oparts.items(), key=lambda item: item[1])}
   for opart in oparts:
-    filter = Q(office_part = opart) & Q(duplicateof = None)
-    out += "<a href=query/{}>{} : {}</a>, ".format(str_from_filter(filter), opart, oparts[opart])
+    query = {
+      "filters": {
+        "office_part": opart,
+        "duplicateof": None
+      }
+    }
+    out += "<a href=query/{}>{} : {}</a>, ".format(str_from_query(query), opart, oparts[opart])
   out += "<br>"
   return out
 
@@ -109,8 +165,13 @@ def tag_usage():
     for tag in chant.tags.all():
       mydic[tag] += 1
   for tag in mydic:
-    filter = Q(tags = tag) & Q(duplicateof = None)
-    out += "<br><a href=query/{}>{} : {}</a>, ".format(str_from_filter(filter), tag.tag, mydic[tag])
+    query = {
+      "filters": {
+        "tags": tag.id,
+        "duplicateof": None
+      }
+    }
+    out += "<br><a href=query/{}>{} : {}</a>, ".format(str_from_query(query), tag.tag, mydic[tag])
   return out
 
 def export_to_nocturnale():

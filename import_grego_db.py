@@ -85,7 +85,7 @@ def flush_and_import():
       chant = Chant.objects.get(id = eval(attrib_dict['chant_id']) )
     except:
       print(attrib_dict['chant_id'])
-      raise
+      continue
     source = Source.objects.get(id = eval(attrib_dict['source']) )
     cs.chant = chant
     cs.source = source
@@ -98,7 +98,11 @@ def flush_and_import():
     attrib_dict = {}
     for info in chanttag:
       attrib_dict[info.attrib['name']] = info.text
-    chant = Chant.objects.get(id = eval(attrib_dict['chant_id']) )
+    try:
+      chant = Chant.objects.get(id = eval(attrib_dict['chant_id']) )
+    except:
+      print(attrib_dict['chant_id'])
+      continue
     tag = Tag.objects.get(id = eval(attrib_dict['tag_id']) )
     chant.tags.add(tag)
     chant.save()
@@ -112,7 +116,8 @@ def flush_and_import():
       chant = Chant.objects.get(id = eval(attrib_dict['chant_id']) )
       pf.chant = chant
     except:
-      pass
+      print(attrib_dict['chant_id'])
+      continue
     pf.pleasefix = attrib_dict['pleasefix']
     pf.time = eval(attrib_dict['time'])
     pf.fixed = eval(attrib_dict['fixed'])
